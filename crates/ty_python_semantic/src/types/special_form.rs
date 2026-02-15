@@ -11,7 +11,7 @@ use crate::semantic_index::{
 use crate::types::{
     CallableType, FunctionDecorators, IntersectionBuilder, InvalidTypeExpression,
     InvalidTypeExpressionError, TypeDefinition, TypeQualifiers, generics::typing_self,
-    infer::{infer_definition_types, nearest_enclosing_class},
+    infer::{function_known_decorators, nearest_enclosing_class},
 };
 use ruff_db::files::File;
 use strum_macros::EnumString;
@@ -681,19 +681,13 @@ impl SpecialFormType {
                         return false;
                     };
 
-                    let DefinitionKind::Function(_) = binding_definition.kind(db) else {
+                    if !matches!(binding_definition.kind(db), DefinitionKind::Function(_)) {
                         return false;
-                    };
+                    }
 
-                    infer_definition_types(db, binding_definition)
-                        .declaration_type(binding_definition)
-                        .inner_type()
-                        .as_function_literal()
-                        .is_some_and(|function| {
-                            function.name(db).as_str() != "__new__"
-                                && function
-                                    .has_known_decorator(db, FunctionDecorators::STATICMETHOD)
-                        })
+                    binding_definition.name(db).as_deref() != Some("__new__")
+                        && function_known_decorators(db, binding_definition)
+                            .contains(FunctionDecorators::STATICMETHOD)
                 });
                 if in_staticmethod {
                     return Err(InvalidTypeExpressionError {
